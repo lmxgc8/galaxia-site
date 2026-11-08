@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Galaxia</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #04030c;
+        --fg: #f3eaff;
+        box-sizing: border-box;
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        overflow: hidden;
+        font-family: "Georgia", serif;
+      }
+      canvas {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+      #msg {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: calc(8vh + env(safe-area-inset-bottom, 0px));
+        text-align: center;
+        padding: 0 24px;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 2.5s;
+      }
+      #msg.on {
+        opacity: 1;
+      }
+      #msg h1 {
+        font-size: clamp(22px, 5vw, 40px);
+        font-weight: 400;
+        letter-spacing: 0.08em;
+        margin: 0 0 6px;
+        text-shadow: 0 0 18px #b58cff;
+      }
+      #msg p {
+        margin: 0;
+        font-size: clamp(14px, 3vw, 18px);
+        opacity: 0.75;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+    <div id="msg">
+      <h1 id="t">En un mapa de infinitas posibilidades</h1>
+      <p id="s">Terminamos coincidiendo por aquí</p>
+    </div>
+    <script>
+      // ====== PERSONALIZA AQUÍ ======
+      var TITULO = "En un mapa de infinitas posibilidades";
+      var SUBTITULO = "Terminamos coincidiendo por aquí";
+      // ==============================
+      document.getElementById("t").textContent = TITULO;
+      document.getElementById("s").textContent = SUBTITULO;
+      var cv = document.getElementById("c"),
+        ctx = cv.getContext("2d");
+      var W, H, dpr, cx, cy, scale;
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        W = innerWidth;
+        H = innerHeight;
+        cv.width = W * dpr;
+        cv.height = H * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cx = W / 2;
+        cy = H * 0.45;
+        scale = Math.min(W, H) * 0.5;
+      }
+      addEventListener("resize", resize);
+      resize();
+
+      function gauss() {
+        return (
+          (Math.random() + Math.random() + Math.random() + Math.random() - 2) /
+          2
+        );
+      }
+      var N = W < 600 ? 7000 : 12000,
+        ARMS = 4,
+        TWIST = 3.2;
+      var P = [];
+      for (var i = 0; i < N; i++) {
+        var r = Math.pow(Math.random(), 1.5);
+        var arm = i % ARMS;
+        var a =
+          r * TWIST * Math.PI +
+          arm * ((Math.PI * 2) / ARMS) +
+          gauss() * (0.45 - r * 0.25);
+        var rr = r + gauss() * 0.03;
+        var y = gauss() * 0.12 * (1 - r * 0.8);
+        var hue =
+          r < 0.15 ? 40 : r < 0.5 ? 300 - r * 160 : 260 - (r - 0.5) * 60;
+        P.push({
+          x: Math.cos(a) * rr,
+          z: Math.sin(a) * rr,
+          y: y,
+          h: hue,
+          l: r < 0.15 ? 85 : 55 + Math.random() * 20,
+          s: Math.random() < 0.12 ? 2.2 : 1.2,
+          a: 0.35 + Math.random() * 0.6,
+        });
+      }
+      var S = [];
+      for (var j = 0; j < 260; j++)
+        S.push({
+          x: Math.random(),
+          y: Math.random(),
+          r: Math.random() * 1.3 + 0.2,
+          p: Math.random() * 6.28,
+          v: 0.5 + Math.random() * 2,
+        });
+      var shoot = null;
+
+      var rotY = 0,
+        tilt = 1.0,
+        vel = 0.0012,
+        drag = false,
+        lx = 0,
+        ly = 0;
+      cv.addEventListener("pointerdown", function (e) {
+        drag = true;
+        lx = e.clientX;
+        ly = e.clientY;
+      });
+      addEventListener("pointerup", function () {
+        drag = false;
+      });
+      addEventListener("pointermove", function (e) {
+        if (!drag) return;
+        rotY += (e.clientX - lx) * 0.008;
+        tilt = Math.max(0.15, Math.min(1.45, tilt + (e.clientY - ly) * 0.006));
+        lx = e.clientX;
+        ly = e.clientY;
+      });
+
+      var t0 = performance.now();
+      function frame(now) {
+        var t = (now - t0) / 1000;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.fillStyle = "#04030c";
+        ctx.fillRect(0, 0, W, H);
+
+        // fondo de estrellas
+        for (var k = 0; k < S.length; k++) {
+          var st = S[k],
+            tw = 0.4 + 0.6 * Math.abs(Math.sin(t * st.v + st.p));
+          ctx.fillStyle = "rgba(255,255,255," + (tw * 0.8).toFixed(2) + ")";
+          ctx.fillRect(st.x * W, st.y * H, st.r, st.r);
+        }
+        // estrella fugaz
+        if (!shoot && Math.random() < 0.004)
+          shoot = {
+            x: Math.random() * W * 0.8,
+            y: Math.random() * H * 0.3,
+            l: 0,
+          };
+        if (shoot) {
+          shoot.l += 1;
+          var sx = shoot.x + shoot.l * 9,
+            sy = shoot.y + shoot.l * 4;
+          var g = ctx.createLinearGradient(sx, sy, sx - 90, sy - 40);
+          g.addColorStop(0, "rgba(255,255,255,.9)");
+          g.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.strokeStyle = g;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy);
+          ctx.lineTo(sx - 90, sy - 40);
+          ctx.stroke();
+          if (shoot.l > 60) shoot = null;
+        }
+
+        if (!drag) rotY += vel;
+        var cY = Math.cos(rotY),
+          sY = Math.sin(rotY),
+          cT = Math.cos(tilt),
+          sT = Math.sin(tilt);
+
+        // resplandor del núcleo
+        var gl = ctx.createRadialGradient(cx, cy, 0, cx, cy, scale * 0.5);
+        gl.addColorStop(0, "rgba(255,225,170,.55)");
+        gl.addColorStop(0.3, "rgba(210,120,255,.18)");
+        gl.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = gl;
+        ctx.fillRect(cx - scale, cy - scale, scale * 2, scale * 2);
+
+        ctx.globalCompositeOperation = "lighter";
+        for (var i = 0; i < N; i++) {
+          var p = P[i];
+          var x = p.x * cY - p.z * sY,
+            z = p.x * sY + p.z * cY;
+          var y = p.y * cT - z * sT;
+          z = p.y * sT + z * cT;
+          var f = 1 / (1 + z * 0.35);
+          var px = cx + x * scale * 1.6 * f,
+            py = cy + y * scale * 1.6 * f;
+          var tw = 0.75 + 0.25 * Math.sin(t * 2 + i);
+          ctx.fillStyle =
+            "hsla(" + p.h + ",90%," + p.l + "%," + (p.a * tw).toFixed(2) + ")";
+          var sz = p.s * f;
+          ctx.fillRect(px, py, sz, sz);
+        }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      setTimeout(function () {
+        document.getElementById("msg").classList.add("on");
+      }, 1200);
+    </script>
+  </body>
+</html>
